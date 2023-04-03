@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 
+import time
+import sys
 import requests
 import psycopg
 
 # config
-url = "https://example.com/"
-basicauth = ('username', 'password')
-conn = psycopg.connect(host="localhost", dbname="...", user="...", autocommit=True)
+URL = "https://example.com/"
+BASICAUTH = ('username', 'password')
+CONN = psycopg.connect(host="localhost", dbname="...", user="...", autocommit=True)
+PERSISTENT_EVERY_SECONDS = 120
+CLEAN_PERSISTENT_EVERY_SECONDS = 24 * 60 * 60
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
 
 class AC:
     def __init__(
@@ -48,7 +55,7 @@ class Data:
         self.b = b
 
 def fetch() -> Data:
-    r = requests.get(url + '/api/live', auth = basicauth)
+    r = requests.get(URL + '/api/live', auth = BASICAUTH)
     json = r.json()
     # check json format
     assert json["menu"]
@@ -131,22 +138,22 @@ def fetch() -> Data:
     timestamp = json["inverter"][0]["ts_last_success"]
     return Data(timestamp, ac, a, b)
 
-def store(data: Data) -> None:
-    cur = conn.cursor()
+def store(data: Data, persistent: bool) -> None:
+    cur = CONN.cursor()
     cur.execute("""INSERT INTO measurements (
-        timestamp, ac_voltage, ac_current, ac_power, ac_frequency,
+        timestamp, persistent, ac_voltage, ac_current, ac_power, ac_frequency,
         ac_power_factor, ac_temperature, ac_yield_total, ac_yield_day,
         ac_power_dc, ac_efficiency, ac_reactive_power, ac_power_limit,
         a_voltage, a_current, a_power, a_yield_day, a_yield_total, a_irradiation,
         b_voltage, b_current, b_power, b_yield_day, b_yield_total, b_irradiation
     ) VALUES (
-        to_timestamp(%s), %s, %s, %s, %s,
+        to_timestamp(%s), %s, %s, %s, %s, %s,
         %s, %s, %s, %s,
         %s, %s, %s, %s,
         %s, %s, %s, %s, %s, %s,
         %s, %s, %s, %s, %s, %s
     ) ON CONFLICT DO NOTHING""", (
-        data.timestamp, data.ac.voltage, data.ac.current, data.ac.power, data.ac.frequency,
+        data.timestamp, persistent, data.ac.voltage, data.ac.current, data.ac.power, data.ac.frequency,
         data.ac.power_factor, data.ac.temperature, data.ac.yield_total, data.ac.yield_day,
         data.ac.power_dc, data.ac.efficiency, data.ac.reactive_power, data.ac.power_limit,
         data.a.voltage, data.a.current, data.a.power, data.a.yield_day, data.a.yield_total, data.a.irradiation,
@@ -154,8 +161,42 @@ def store(data: Data) -> None:
     ))
 
 def main() -> None:
-    data = fetch()
-    store(data)
+    # make sure both get executed immediately
+    last_persistent = time.time() - PERSISTENT_EVERY_SECONDS - 10
+    last_clean = time.time() - CLEAN_PERSISTENT_EVERY_SECONDS - 10
+
+    while True:
+        current_time = time.time()
+        # clean
+        if last_clean + CLEAN_PERSISTENT_EVERY_SECONDS <= current_time:
+            try:
+                cur = CONN.cursor()
+                cur.execute("""
+                    DELETE FROM measurements
+                    WHERE persistent = false AND timestamp < (NOW() - INTERVAL '7 DAYS')
+                """)
+                last_clean = current_time
+            except Exception as e:
+                eprint("error cleaning old non-persistent measurements: ", e)
+
+        # fetch & store
+        try:
+            data = fetch()
+            if data.timestamp == 0:
+                # inverter is currently down
+                continue
+            persistent = False
+            if last_persistent + PERSISTENT_EVERY_SECONDS <= current_time:
+                persistent = True
+            store(data, persistent)
+            # only after successful store
+            if persistent:
+                last_persistent = current_time
+        except Exception as e:
+            eprint("error fetching or storing: ", e)
+
+
+        time.sleep(5)
 
 if __name__ == "__main__":
     main()

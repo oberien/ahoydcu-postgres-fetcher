@@ -1,0 +1,12 @@
+[Unit]
+Description=AhoyDTU Postgres Fetcher
+Requires=postgresql.service
+After=postgresql.service
+
+[Service]
+Restart=always
+Type=simple
+ExecStart=/usr/local/bin/ahoydtu-postgres-fetcher.py
+
+[Install]
+WantedBy=multi-user.target

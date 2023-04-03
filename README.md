@@ -18,7 +18,8 @@ REVOKE CONNECT ON DATABASE pv FROM PUBLIC;
 -- Create Tables
 SET ROLE pv;
 CREATE TABLE measurements (
-    timestamp timestamp PRIMARY KEY,
+    timestamp timestamp PRIMARY KEY NOT NULL,
+    persistent bool NOT NULL,
     ac_voltage float4 NOT NULL,
     ac_current float4 NOT NULL,
     ac_power float4 NOT NULL,
@@ -46,11 +47,12 @@ CREATE TABLE measurements (
     b_yield_total float4 NOT NULL,
     b_irradiation float4 NOT NULL
 );
+CREATE INDEX IF NOT EXISTS measurements_persistent ON measurements (timestamp) where persistent = false;
 ```
 
 ### Installation
 
 ```sh
 sudo install -D -m 755 -o root -g root ahoydtu-postgres-fetcher.py /usr/local/bin/
-sudo install -D -m 644 -o root -g root ahoydtu-postgres-fetcher.cron /etc/cron.d/ahoydtu-postgres-fetcher
+sudo install -D -m 644 -o root -g root ahoydtu-postgres-fetcher.service /usr/lib/systemd/system/
 ```
