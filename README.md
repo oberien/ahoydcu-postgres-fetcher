@@ -18,7 +18,7 @@ REVOKE CONNECT ON DATABASE pv FROM PUBLIC;
 -- Create Tables
 SET ROLE pv;
 CREATE TABLE measurements (
-    timestamp timestamp PRIMARY KEY NOT NULL,
+    timestamp timestamp with time zone PRIMARY KEY NOT NULL,
     persistent bool NOT NULL,
     ac_voltage float4 NOT NULL,
     ac_current float4 NOT NULL,
