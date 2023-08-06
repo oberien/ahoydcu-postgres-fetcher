@@ -1,4 +1,27 @@
-# Ahoy Postgres Fetcher
+# AhoyDTU Postgres Fetcher
+
+# Superseded by [iot2db](https://github.com/oberien/iot2db)
+
+Migration:
+* setup and configure AhoyDTU and iot2db as explained in the iot2db AhoyDTU device example
+* modify the postgres from within `psql` like this:
+    ```sql
+    SET ROLE airq;
+    DROP INDEX measurements_persistent;
+    -- use the create table command from the iot2db documentation with a different name
+    CREATE TABLE measurements2 (...) PARTITION BY ...;
+    BEGIN TRANSACTION;
+    LOCK TABLE measurements;
+    ALTER TABLE measurements RENAME TO measurements_old;
+    INSERT INTO measurements2 (
+        timestamp, persistent, ac_voltage, ac_current, ac_power, ac_frequency, ac_power_factor, ac_temperature, ac_yield_total, ac_yield_day, ac_power_dc, ac_efficiency, ac_reactive_power, ac_power_limit, a_voltage, a_current, a_power, a_yield_day, a_yield_total, a_irradiation, b_voltage, b_current, b_power, b_yield_day, b_yield_total, b_irradiation
+    ) SELECT timestamp, persistent, ac_voltage, ac_current, ac_power, ac_frequency, ac_power_factor, ac_temperature, ac_yield_total, ac_yield_day, ac_power_dc, ac_efficiency, ac_reactive_power, ac_power_limit, a_voltage, a_current, a_power, a_yield_day, a_yield_total, a_irradiation, b_voltage, b_current, b_power, b_yield_day, b_yield_total, b_irradiation FROM measurements_old;
+    ALTER TABLE measurements2 RENAME TO measurements;
+    COMMIT;
+    DROP TABLE measurements_old;
+    ```
+
+---
 
 Tested against AhoyDTU version 0.5.66 with a HM-800 with 2 modules.
 
